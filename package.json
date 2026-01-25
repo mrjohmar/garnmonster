@@ -1,0 +1,17 @@
+{
+  "name": "garnmonster",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "web": "npm run dev --workspace=apps/web",
+    "build:web": "npm run build --workspace=apps/web",
+    "preview": "npm run preview --workspace=apps/web"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

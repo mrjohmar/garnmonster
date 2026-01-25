@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:share.google)",
+      "WebFetch(domain:www.google.com)",
+      "Bash(xargs:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:web:*)",
+      "Bash(gh auth status:*)",
+      "Bash(gh repo create:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: Garnmönster - Virkningsapp med temperaturmönster\n\nFeatures:\n- Temperaturmönster-generator med SMHI-data\n- Interaktiv färgskala med 8 färdiga paletter\n- Garnbibliotek med färger från Drops, Sandnes och Favoritgarner\n- Mönstervisualisering med zoom och export\n- Beräkning av garnåtgång per färg\n- Export av mönsterbeskrivning\n\nTech stack:\n- React 18 + TypeScript\n- Vite 5\n- Tailwind CSS\n- React Router\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git config:*)"
+    ]
+  }
+}
