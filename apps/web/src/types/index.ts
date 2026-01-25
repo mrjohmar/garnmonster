@@ -1,8 +1,19 @@
+// Temperature mode options
+export type TemperatureMode = 'hour' | 'average' | 'max' | 'min';
+
+export const TEMPERATURE_MODES: { value: TemperatureMode; label: string; description: string }[] = [
+  { value: 'hour', label: 'Vid klockslag', description: 'Temperatur vid ett specifikt klockslag varje dag' },
+  { value: 'average', label: 'Dygnsmedel', description: 'Medeltemperatur för hela dygnet' },
+  { value: 'max', label: 'Högsta', description: 'Dagens högsta temperatur' },
+  { value: 'min', label: 'Lägsta', description: 'Dagens lägsta temperatur' },
+];
+
 // Temperature data types
 export interface TemperatureData {
   date: string;
   temperature: number;
-  hour: number;
+  hour?: number; // Only used for 'hour' mode
+  mode: TemperatureMode;
 }
 
 export interface TemperatureRange {

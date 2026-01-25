@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MapPin, Calendar, Palette, Eye, Download, Loader2, ChevronRight, ChevronLeft, Search } from 'lucide-react';
-import { SMHILocation, TemperatureRange, PatternResult, PatternSettings } from '@/types';
+import { SMHILocation, TemperatureRange, PatternResult, PatternSettings, TemperatureMode, TEMPERATURE_MODES } from '@/types';
 import { SWEDISH_LOCATIONS, fetchTemperatureData } from '@/services/smhi';
 import { COLOR_PALETTES, generateTemperatureRanges, generatePattern, generatePatternDescription } from '@/services/pattern';
 import { searchLocation } from '@/services/geocoding';
@@ -21,6 +21,7 @@ export default function TemperaturePatternPage() {
   const [location, setLocation] = useState<SMHILocation | null>(null);
   const [startDate, setStartDate] = useState('2024-01-01');
   const [endDate, setEndDate] = useState('2024-12-31');
+  const [temperatureMode, setTemperatureMode] = useState<TemperatureMode>('hour');
   const [hour, setHour] = useState(12);
   const [selectedPalette, setSelectedPalette] = useState(COLOR_PALETTES[0]);
   const [colorRanges, setColorRanges] = useState<TemperatureRange[]>([]);
@@ -63,7 +64,7 @@ export default function TemperaturePatternPage() {
 
     setIsLoading(true);
     try {
-      const data = await fetchTemperatureData(location, startDate, endDate, hour);
+      const data = await fetchTemperatureData(location, startDate, endDate, temperatureMode, hour);
 
       const settings: PatternSettings = {
         startDate,
@@ -166,9 +167,11 @@ export default function TemperaturePatternPage() {
           <DatesStep
             startDate={startDate}
             endDate={endDate}
+            temperatureMode={temperatureMode}
             hour={hour}
             onStartDateChange={setStartDate}
             onEndDateChange={setEndDate}
+            onModeChange={setTemperatureMode}
             onHourChange={setHour}
           />
         )}
@@ -355,20 +358,22 @@ function LocationStep({ location, onSelect }: LocationStepProps) {
 interface DatesStepProps {
   startDate: string;
   endDate: string;
+  temperatureMode: TemperatureMode;
   hour: number;
   onStartDateChange: (date: string) => void;
   onEndDateChange: (date: string) => void;
+  onModeChange: (mode: TemperatureMode) => void;
   onHourChange: (hour: number) => void;
 }
 
-function DatesStep({ startDate, endDate, hour, onStartDateChange, onEndDateChange, onHourChange }: DatesStepProps) {
+function DatesStep({ startDate, endDate, temperatureMode, hour, onStartDateChange, onEndDateChange, onModeChange, onHourChange }: DatesStepProps) {
   return (
     <div>
       <h2 className="text-xl font-display font-semibold text-gray-800 mb-4">
-        Välj datumintervall
+        Välj datumintervall och temperaturtyp
       </h2>
       <p className="text-gray-600 mb-6">
-        Bestäm vilken period du vill skapa mönster för. En typisk temperaturfilt omfattar ett helt år.
+        Bestäm vilken period du vill skapa mönster för och vilken typ av temperatur som ska användas.
       </p>
 
       <div className="grid sm:grid-cols-2 gap-6 mb-6">
@@ -392,28 +397,60 @@ function DatesStep({ startDate, endDate, hour, onStartDateChange, onEndDateChang
         </div>
       </div>
 
-      <div>
-        <label className="label">Klockslag för temperaturavläsning</label>
-        <select
-          value={hour}
-          onChange={(e) => onHourChange(Number(e.target.value))}
-          className="input"
-        >
-          {Array.from({ length: 24 }, (_, i) => (
-            <option key={i} value={i}>
-              {i.toString().padStart(2, '0')}:00
-            </option>
+      <div className="mb-6">
+        <label className="label">Temperaturtyp</label>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {TEMPERATURE_MODES.map((mode) => (
+            <button
+              key={mode.value}
+              onClick={() => onModeChange(mode.value)}
+              className={`p-4 rounded-lg text-left transition-all ${
+                temperatureMode === mode.value
+                  ? 'bg-primary-100 border-2 border-primary-500 text-primary-700'
+                  : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+              }`}
+            >
+              <div className="font-medium">{mode.label}</div>
+              <div className="text-sm text-gray-500 mt-1">{mode.description}</div>
+            </button>
           ))}
-        </select>
-        <p className="text-sm text-gray-500 mt-2">
-          Temperaturen vid denna tid varje dag används för att bestämma radens färg.
-        </p>
+        </div>
       </div>
 
-      <div className="mt-6 p-4 bg-primary-50 rounded-lg">
+      {temperatureMode === 'hour' && (
+        <div className="mb-6">
+          <label className="label">Klockslag för temperaturavläsning</label>
+          <select
+            value={hour}
+            onChange={(e) => onHourChange(Number(e.target.value))}
+            className="input"
+          >
+            {Array.from({ length: 24 }, (_, i) => (
+              <option key={i} value={i}>
+                {i.toString().padStart(2, '0')}:00
+              </option>
+            ))}
+          </select>
+          <p className="text-sm text-gray-500 mt-2">
+            Temperaturen vid denna tid varje dag används för att bestämma radens färg.
+          </p>
+        </div>
+      )}
+
+      <div className="p-4 bg-primary-50 rounded-lg">
         <p className="text-sm text-primary-700">
-          <strong>Tips:</strong> Kl 12:00-14:00 ger ofta dagens högsta temperatur,
-          medan kl 06:00-08:00 ger en mer dämperad bild av vädret.
+          {temperatureMode === 'hour' && (
+            <><strong>Tips:</strong> Kl 12:00-14:00 ger ofta dagens högsta temperatur, medan kl 06:00-08:00 ger en mer dämperad bild av vädret.</>
+          )}
+          {temperatureMode === 'average' && (
+            <><strong>Tips:</strong> Dygnsmedel ger en jämnare övergång mellan färgerna och är mer representativt för hela dagens väder.</>
+          )}
+          {temperatureMode === 'max' && (
+            <><strong>Tips:</strong> Dagens högsta temperatur ger ofta varmare färger och visar sommarens toppar tydligare.</>
+          )}
+          {temperatureMode === 'min' && (
+            <><strong>Tips:</strong> Dagens lägsta temperatur visar nattens kyla och ger ofta kallare färger, särskilt under vintern.</>
+          )}
         </p>
       </div>
     </div>
