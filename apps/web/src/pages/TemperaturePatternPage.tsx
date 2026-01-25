@@ -30,6 +30,12 @@ export default function TemperaturePatternPage() {
   const [yarnWeight, setYarnWeight] = useState('dk');
   const [isLoading, setIsLoading] = useState(false);
   const [patternResult, setPatternResult] = useState<PatternResult | null>(null);
+  const [dataSource, setDataSource] = useState<{
+    stationName: string;
+    isSimulated: boolean;
+    realDataDays: number;
+    totalDays: number;
+  } | null>(null);
 
   useEffect(() => {
     setColorRanges(generateTemperatureRanges(selectedPalette.colors));
@@ -64,7 +70,15 @@ export default function TemperaturePatternPage() {
 
     setIsLoading(true);
     try {
-      const data = await fetchTemperatureData(location, startDate, endDate, temperatureMode, hour);
+      const tempResult = await fetchTemperatureData(location, startDate, endDate, temperatureMode, hour);
+
+      // Store data source info
+      setDataSource({
+        stationName: tempResult.stationName,
+        isSimulated: tempResult.isSimulated,
+        realDataDays: tempResult.realDataDays,
+        totalDays: tempResult.totalDays,
+      });
 
       const settings: PatternSettings = {
         startDate,
@@ -77,7 +91,7 @@ export default function TemperaturePatternPage() {
         yarnWeight
       };
 
-      const result = generatePattern(data, settings);
+      const result = generatePattern(tempResult.data, settings);
       setPatternResult(result);
     } catch (error) {
       console.error('Failed to load temperature data:', error);
@@ -196,6 +210,7 @@ export default function TemperaturePatternPage() {
             isLoading={isLoading}
             patternResult={patternResult}
             colorRanges={colorRanges}
+            dataSource={dataSource}
           />
         )}
       </div>
@@ -571,9 +586,15 @@ interface PreviewStepProps {
   isLoading: boolean;
   patternResult: PatternResult | null;
   colorRanges: TemperatureRange[];
+  dataSource: {
+    stationName: string;
+    isSimulated: boolean;
+    realDataDays: number;
+    totalDays: number;
+  } | null;
 }
 
-function PreviewStep({ isLoading, patternResult, colorRanges }: PreviewStepProps) {
+function PreviewStep({ isLoading, patternResult, colorRanges, dataSource }: PreviewStepProps) {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-[400px]">
@@ -593,9 +614,42 @@ function PreviewStep({ isLoading, patternResult, colorRanges }: PreviewStepProps
 
   return (
     <div>
-      <h2 className="text-xl font-display font-semibold text-gray-800 mb-4">
+      <h2 className="text-xl font-display font-semibold text-gray-800 mb-2">
         Ditt temperaturmönster
       </h2>
+
+      {/* Data source info */}
+      {dataSource && (
+        <div className={`mb-4 p-3 rounded-lg text-sm ${
+          dataSource.isSimulated
+            ? 'bg-amber-50 border border-amber-200'
+            : 'bg-green-50 border border-green-200'
+        }`}>
+          <div className="flex items-center gap-2">
+            {dataSource.isSimulated ? (
+              <>
+                <span className="text-amber-600 font-medium">⚠️ Simulerad data</span>
+                <span className="text-amber-700">
+                  – Ingen riktig temperaturdata tillgänglig för denna period
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-green-600 font-medium">✓ Riktig SMHI-data</span>
+                <span className="text-green-700">
+                  från station: <strong>{dataSource.stationName}</strong>
+                </span>
+              </>
+            )}
+          </div>
+          {!dataSource.isSimulated && dataSource.realDataDays < dataSource.totalDays && (
+            <p className="text-green-600 text-xs mt-1">
+              Data för {dataSource.realDataDays} av {dataSource.totalDays} dagar
+              ({Math.round(dataSource.realDataDays / dataSource.totalDays * 100)}%)
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-6">
         <div>

@@ -40,11 +40,25 @@ interface SMHIStation {
   name: string;
   latitude: number;
   longitude: number;
+  from: number;
+  to: number;
+  active: boolean;
 }
 
-interface SMHIValue {
-  date: number;
-  value: number;
+interface ParsedTemperature {
+  date: string; // yyyy-MM-dd
+  hour: number;
+  temperature: number;
+}
+
+// Result type that includes metadata about the data source
+export interface TemperatureResult {
+  data: TemperatureData[];
+  stationName: string;
+  stationKey: string;
+  isSimulated: boolean;
+  realDataDays: number;
+  totalDays: number;
 }
 
 let stationsCache: SMHIStation[] | null = null;
@@ -60,11 +74,22 @@ async function fetchStations(): Promise<SMHIStation[]> {
     if (!response.ok) return [];
 
     const data = await response.json();
-    const stations: SMHIStation[] = (data.station || []).map((s: SMHIStation) => ({
+    const stations: SMHIStation[] = (data.station || []).map((s: {
+      key: string;
+      name: string;
+      latitude: number;
+      longitude: number;
+      from: number;
+      to: number;
+      active: boolean;
+    }) => ({
       key: s.key,
       name: s.name,
       latitude: s.latitude,
       longitude: s.longitude,
+      from: s.from,
+      to: s.to,
+      active: s.active,
     }));
     stationsCache = stations;
 
@@ -75,13 +100,57 @@ async function fetchStations(): Promise<SMHIStation[]> {
   }
 }
 
-async function findNearestStation(lat: number, lon: number): Promise<SMHIStation | null> {
+async function findNearestStation(
+  lat: number,
+  lon: number,
+  startDate: Date,
+  endDate: Date
+): Promise<SMHIStation | null> {
   const stations = await fetchStations();
 
+  // Filter stations that have data covering the requested period
+  const startTime = startDate.getTime();
+  const endTime = endDate.getTime();
+
+  const eligibleStations = stations.filter(s => {
+    return s.from <= startTime && s.to >= endTime;
+  });
+
+  console.log(`Found ${eligibleStations.length} stations with data for the requested period`);
+
+  if (eligibleStations.length === 0) {
+    // Fall back to any station with data overlapping the period
+    const partialStations = stations.filter(s => {
+      return s.to >= startTime && s.from <= endTime;
+    });
+    console.log(`Found ${partialStations.length} stations with partial data`);
+
+    if (partialStations.length === 0) return null;
+
+    // Find nearest among partial stations
+    let nearestStation: SMHIStation | null = null;
+    let minDistance = Infinity;
+
+    for (const station of partialStations) {
+      const distance = Math.sqrt(
+        Math.pow(station.latitude - lat, 2) +
+        Math.pow(station.longitude - lon, 2)
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestStation = station;
+      }
+    }
+
+    return nearestStation;
+  }
+
+  // Find nearest station among eligible ones
   let nearestStation: SMHIStation | null = null;
   let minDistance = Infinity;
 
-  for (const station of stations) {
+  for (const station of eligibleStations) {
     const distance = Math.sqrt(
       Math.pow(station.latitude - lat, 2) +
       Math.pow(station.longitude - lon, 2)
@@ -96,6 +165,53 @@ async function findNearestStation(lat: number, lon: number): Promise<SMHIStation
   return nearestStation;
 }
 
+// Parse CSV data from SMHI
+function parseCSVData(csvText: string): ParsedTemperature[] {
+  const lines = csvText.split('\n');
+  const temperatures: ParsedTemperature[] = [];
+
+  // Find the data start line (after "Datum;Tid (UTC);...")
+  let dataStartIndex = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('Datum;Tid')) {
+      dataStartIndex = i + 1;
+      break;
+    }
+  }
+
+  // Parse data lines
+  for (let i = dataStartIndex; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // Format: Datum;Tid (UTC);Lufttemperatur;Kvalitet;;...
+    const parts = line.split(';');
+    if (parts.length < 3) continue;
+
+    const dateStr = parts[0]; // yyyy-MM-dd
+    const timeStr = parts[1]; // HH:mm:ss
+    const tempStr = parts[2];
+
+    // Validate date format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+
+    const temperature = parseFloat(tempStr);
+    if (isNaN(temperature)) continue;
+
+    // Extract hour from time
+    const hourMatch = timeStr.match(/^(\d{2}):/);
+    const hour = hourMatch ? parseInt(hourMatch[1], 10) : 0;
+
+    temperatures.push({
+      date: dateStr,
+      hour,
+      temperature,
+    });
+  }
+
+  return temperatures;
+}
+
 // Main function to fetch temperature data
 export async function fetchTemperatureData(
   location: SMHILocation,
@@ -103,83 +219,112 @@ export async function fetchTemperatureData(
   endDate: string,
   mode: TemperatureMode,
   hour: number = 12
-): Promise<TemperatureData[]> {
+): Promise<TemperatureResult> {
   const start = parseISO(startDate);
   const end = parseISO(endDate);
   const days = eachDayOfInterval({ start, end });
 
   try {
-    const station = await findNearestStation(location.latitude, location.longitude);
+    const station = await findNearestStation(
+      location.latitude,
+      location.longitude,
+      start,
+      end
+    );
 
     if (!station) {
       console.log('No station found, using simulated data');
-      return generateSimulatedData(days, mode, hour, location.latitude);
+      return {
+        data: generateSimulatedData(days, mode, hour, location.latitude),
+        stationName: 'Simulerad data',
+        stationKey: '',
+        isSimulated: true,
+        realDataDays: 0,
+        totalDays: days.length,
+      };
     }
 
     console.log(`Using station: ${station.name} (${station.key})`);
 
-    // Try corrected-archive first, then latest-months
-    let data: { value?: SMHIValue[] } | null = null;
+    // Fetch CSV data from corrected-archive (historical data)
+    const csvUrl = `${SMHI_BASE_URL}/version/1.0/parameter/${TEMPERATURE_PARAMETER}/station/${station.key}/period/corrected-archive/data.csv`;
 
-    const archiveResponse = await fetch(
-      `${SMHI_BASE_URL}/version/1.0/parameter/${TEMPERATURE_PARAMETER}/station/${station.key}/period/corrected-archive/data.json`
-    );
+    const response = await fetch(csvUrl);
 
-    if (archiveResponse.ok) {
-      data = await archiveResponse.json();
-    } else {
-      const latestResponse = await fetch(
-        `${SMHI_BASE_URL}/version/1.0/parameter/${TEMPERATURE_PARAMETER}/station/${station.key}/period/latest-months/data.json`
-      );
-      if (latestResponse.ok) {
-        data = await latestResponse.json();
-      }
+    if (!response.ok) {
+      console.log(`Failed to fetch CSV data: ${response.status}, using simulated data`);
+      return {
+        data: generateSimulatedData(days, mode, hour, location.latitude),
+        stationName: station.name,
+        stationKey: station.key,
+        isSimulated: true,
+        realDataDays: 0,
+        totalDays: days.length,
+      };
     }
 
-    if (!data || !data.value || data.value.length === 0) {
-      console.log('No SMHI data available, using simulated data');
-      return generateSimulatedData(days, mode, hour, location.latitude);
+    const csvText = await response.text();
+    const parsedData = parseCSVData(csvText);
+
+    console.log(`Parsed ${parsedData.length} temperature readings from CSV`);
+
+    if (parsedData.length === 0) {
+      console.log('No data in CSV, using simulated data');
+      return {
+        data: generateSimulatedData(days, mode, hour, location.latitude),
+        stationName: station.name,
+        stationKey: station.key,
+        isSimulated: true,
+        realDataDays: 0,
+        totalDays: days.length,
+      };
     }
 
-    return parseSmhiData(data.value, days, mode, hour, location.latitude);
+    const result = processTemperatureData(parsedData, days, mode, hour, location.latitude);
+
+    return {
+      data: result.temperatures,
+      stationName: station.name,
+      stationKey: station.key,
+      isSimulated: false,
+      realDataDays: result.realDataCount,
+      totalDays: days.length,
+    };
   } catch (error) {
     console.error('Error fetching temperature data:', error);
-    return generateSimulatedData(days, mode, hour, location.latitude);
+    return {
+      data: generateSimulatedData(days, mode, hour, location.latitude),
+      stationName: 'Simulerad data (fel)',
+      stationKey: '',
+      isSimulated: true,
+      realDataDays: 0,
+      totalDays: days.length,
+    };
   }
 }
 
-// Parse SMHI data and calculate temperatures based on mode
-function parseSmhiData(
-  values: SMHIValue[],
+// Process parsed data and calculate temperatures based on mode
+function processTemperatureData(
+  values: ParsedTemperature[],
   days: Date[],
   mode: TemperatureMode,
   hour: number,
   latitude: number
-): TemperatureData[] {
-  console.log(`Parsing ${values.length} SMHI values for mode: ${mode}`);
+): { temperatures: TemperatureData[]; realDataCount: number } {
+  console.log(`Processing ${values.length} temperature readings for mode: ${mode}`);
 
   // Group values by date
   const dailyTemps = new Map<string, number[]>();
+  const hourlyTemps = new Map<string, number>();
 
   for (const item of values) {
-    const date = new Date(item.date);
-    const dateStr = format(date, 'yyyy-MM-dd');
-
-    if (!dailyTemps.has(dateStr)) {
-      dailyTemps.set(dateStr, []);
+    if (!dailyTemps.has(item.date)) {
+      dailyTemps.set(item.date, []);
     }
-    dailyTemps.get(dateStr)!.push(item.value);
-  }
+    dailyTemps.get(item.date)!.push(item.temperature);
 
-  // For hour mode, also create hour-specific map
-  const hourlyTemps = new Map<string, number>();
-  if (mode === 'hour') {
-    for (const item of values) {
-      const date = new Date(item.date);
-      const dateStr = format(date, 'yyyy-MM-dd');
-      const itemHour = date.getHours();
-      hourlyTemps.set(`${dateStr}-${itemHour}`, item.value);
-    }
+    // Store hourly values
+    hourlyTemps.set(`${item.date}-${item.hour}`, item.temperature);
   }
 
   const temperatures: TemperatureData[] = [];
@@ -207,13 +352,13 @@ function parseSmhiData(
           temp = hourlyTemps.get(`${dateStr}-${hour}`);
           if (temp === undefined) {
             for (let offset = 1; offset <= 3; offset++) {
-              temp = hourlyTemps.get(`${dateStr}-${hour - offset}`) ||
+              temp = hourlyTemps.get(`${dateStr}-${hour - offset}`) ??
                      hourlyTemps.get(`${dateStr}-${hour + offset}`);
               if (temp !== undefined) break;
             }
           }
           // If still no hourly data, use day average
-          if (temp === undefined) {
+          if (temp === undefined && dayTemps.length > 0) {
             temp = dayTemps.reduce((a, b) => a + b, 0) / dayTemps.length;
           }
           break;
@@ -221,7 +366,7 @@ function parseSmhiData(
       realDataCount++;
     }
 
-    // Generate simulated if no real data
+    // Generate simulated if no real data for this day
     if (temp === undefined) {
       temp = generateTemperatureForDate(day, latitude, mode);
     }
@@ -235,7 +380,7 @@ function parseSmhiData(
   }
 
   console.log(`Real data for ${realDataCount}/${days.length} days`);
-  return temperatures;
+  return { temperatures, realDataCount };
 }
 
 // Generate simulated data
@@ -282,16 +427,16 @@ function generateTemperatureForDate(date: Date, latitude: number, mode: Temperat
   // Adjust based on mode
   switch (mode) {
     case 'max':
-      baseTemp += 5 + randomFactor * 4; // Higher temps
+      baseTemp += 5 + randomFactor * 4;
       break;
     case 'min':
-      baseTemp -= 5 + randomFactor * 4; // Lower temps
+      baseTemp -= 5 + randomFactor * 4;
       break;
     case 'average':
-      baseTemp += randomFactor * 4; // Medium variation
+      baseTemp += randomFactor * 4;
       break;
     case 'hour':
-      baseTemp += randomFactor * 6; // Normal variation
+      baseTemp += randomFactor * 6;
       break;
   }
 
