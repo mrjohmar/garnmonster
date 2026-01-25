@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { MapPin, Calendar, Palette, Eye, Download, Loader2, ChevronRight, ChevronLeft } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { MapPin, Calendar, Palette, Eye, Download, Loader2, ChevronRight, ChevronLeft, Search } from 'lucide-react';
 import { SMHILocation, TemperatureRange, PatternResult, PatternSettings } from '@/types';
 import { SWEDISH_LOCATIONS, fetchTemperatureData } from '@/services/smhi';
 import { COLOR_PALETTES, generateTemperatureRanges, generatePattern, generatePatternDescription } from '@/services/pattern';
+import { searchLocation } from '@/services/geocoding';
 import PatternPreview from '@/components/PatternPreview';
 import ColorRangeEditor from '@/components/ColorRangeEditor';
 
@@ -248,10 +249,45 @@ interface LocationStepProps {
 
 function LocationStep({ location, onSelect }: LocationStepProps) {
   const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<SMHILocation[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
-  const filteredLocations = SWEDISH_LOCATIONS.filter(loc =>
-    loc.name.toLowerCase().includes(search.toLowerCase())
+  // Debounced search function
+  const debouncedSearch = useCallback(
+    (() => {
+      let timeout: ReturnType<typeof setTimeout>;
+      return (query: string) => {
+        clearTimeout(timeout);
+        if (query.length < 2) {
+          setSearchResults([]);
+          setHasSearched(false);
+          return;
+        }
+        timeout = setTimeout(async () => {
+          setIsSearching(true);
+          const results = await searchLocation(query);
+          setSearchResults(results);
+          setIsSearching(false);
+          setHasSearched(true);
+        }, 300);
+      };
+    })(),
+    []
   );
+
+  useEffect(() => {
+    debouncedSearch(search);
+  }, [search, debouncedSearch]);
+
+  // Show search results if searching, otherwise show filtered preset locations
+  const filteredLocations = search.length >= 2
+    ? searchResults
+    : SWEDISH_LOCATIONS.filter(loc =>
+        loc.name.toLowerCase().includes(search.toLowerCase())
+      ).slice(0, 20);
+
+  const showingSearchResults = search.length >= 2 && hasSearched;
 
   return (
     <div>
@@ -259,24 +295,42 @@ function LocationStep({ location, onSelect }: LocationStepProps) {
         Välj plats för temperaturdata
       </h2>
       <p className="text-gray-600 mb-6">
-        Välj den stad vars temperatur du vill basera ditt mönster på.
+        Sök efter valfri ort i Sverige eller välj från listan nedan.
       </p>
 
-      <input
-        type="text"
-        placeholder="Sök stad..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="input mb-4"
-      />
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Sök ort i Sverige..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="input pl-10"
+        />
+        {isSearching && (
+          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+        )}
+      </div>
+
+      {showingSearchResults && searchResults.length === 0 && !isSearching && (
+        <p className="text-gray-500 text-center py-4 mb-4 bg-gray-50 rounded-lg">
+          Inga resultat för "{search}". Prova en annan stavning.
+        </p>
+      )}
+
+      {showingSearchResults && searchResults.length > 0 && (
+        <p className="text-sm text-gray-500 mb-2">
+          Sökresultat för "{search}":
+        </p>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-[300px] overflow-y-auto">
         {filteredLocations.map((loc) => (
           <button
-            key={loc.name}
+            key={`${loc.name}-${loc.latitude}-${loc.longitude}`}
             onClick={() => onSelect(loc)}
             className={`p-3 rounded-lg text-left transition-all ${
-              location?.name === loc.name
+              location?.name === loc.name && location?.latitude === loc.latitude
                 ? 'bg-primary-100 border-2 border-primary-500 text-primary-700'
                 : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
             }`}
@@ -288,6 +342,12 @@ function LocationStep({ location, onSelect }: LocationStepProps) {
           </button>
         ))}
       </div>
+
+      {!showingSearchResults && (
+        <p className="text-xs text-gray-400 mt-3">
+          Visar populära orter. Skriv minst 2 tecken för att söka efter fler.
+        </p>
+      )}
     </div>
   );
 }

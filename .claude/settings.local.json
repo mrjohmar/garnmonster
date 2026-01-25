@@ -11,7 +11,20 @@
       "Bash(gh auth status:*)",
       "Bash(gh repo create:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: Garnmönster - Virkningsapp med temperaturmönster\n\nFeatures:\n- Temperaturmönster-generator med SMHI-data\n- Interaktiv färgskala med 8 färdiga paletter\n- Garnbibliotek med färger från Drops, Sandnes och Favoritgarner\n- Mönstervisualisering med zoom och export\n- Beräkning av garnåtgång per färg\n- Export av mönsterbeskrivning\n\nTech stack:\n- React 18 + TypeScript\n- Vite 5\n- Tailwind CSS\n- React Router\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(git push)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(gh repo edit:*)",
+      "Bash(npx vercel:*)",
+      "Bash(gh secret set:*)",
+      "Bash(start \"https://vercel.com/account/tokens\")",
+      "Bash(echo:*)",
+      "Bash(gh secret:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nConfigure Vercel deployment for monorepo\n\n- Add working-directory for apps/web\n- Include .vercel/project.json for CI\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(gh run:*)",
+      "Bash(start \"https://web-ebon-mu-35.vercel.app\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd location search with geocoding\n\n- Search any Swedish location using OpenStreetMap Nominatim API\n- Debounced search for better performance\n- Expanded preset list to 100+ locations\n- Shows loading indicator during search\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }
