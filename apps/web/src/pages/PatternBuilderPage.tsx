@@ -81,16 +81,26 @@ export default function PatternBuilderPage() {
   const antalHandlagt = Object.keys(monster.overskrivningar).length;
 
   // Provlappens radmått — normalt eller i verklig proportion via maskprovet.
+  // I proportionsläget härleds både bredd och höjd ur plaggets verkliga form
+  // (bredd/höjd-förhållandet), så ett brett plagg också ser brett ut.
   const { rowHeightPx, rowWidthPx } = useMemo(() => {
     if (!proportion || !monster.maskprov) return { rowHeightPx: 22, rowWidthPx: 340 };
     const { maskor: mpM, varv: mpV } = monster.maskprov;
-    const bredd = 320;
-    const stygnBreddCm = 10 / Math.max(1, mpM);
-    const varvHojdCm = 10 / Math.max(1, mpV);
-    const totalBreddCm = monster.maskor * stygnBreddCm;
-    const pxPerCm = bredd / Math.max(0.1, totalBreddCm);
-    return { rowHeightPx: Math.max(2, varvHojdCm * pxPerCm), rowWidthPx: bredd };
-  }, [proportion, monster.maskprov, monster.maskor]);
+    const totalVarv = Math.max(1, rader.length);
+    // bredd/höjd i cm: (maskor/maskprovMaskor) mot (varv/maskprovVarv), per 10 cm tar ut varandra
+    const aspektWH = (monster.maskor * mpV) / (totalVarv * mpM);
+    const maxSida = 460; // längsta sidan i px
+    let totalH: number;
+    let totalW: number;
+    if (aspektWH >= 1) {
+      totalW = maxSida;
+      totalH = maxSida / aspektWH;
+    } else {
+      totalH = maxSida;
+      totalW = maxSida * aspektWH;
+    }
+    return { rowHeightPx: Math.max(1, totalH / totalVarv), rowWidthPx: Math.round(totalW) };
+  }, [proportion, monster.maskprov, monster.maskor, rader.length]);
 
   const previewRows = useMemo<PreviewRow[]>(
     () =>
