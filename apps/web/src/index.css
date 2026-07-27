@@ -20,6 +20,50 @@ body {
   min-height: 100vh;
 }
 
+/* Respektera användare som föredrar mindre rörelse. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Synligt tabbfokus i hela appen. */
+:focus-visible {
+  outline: 2px solid #404040;
+  outline-offset: 2px;
+}
+
+/* Utskrift (Skriv ut / PDF): visa bara provlappen. */
+@media print {
+  body {
+    background: #ffffff;
+  }
+  body * {
+    visibility: hidden;
+  }
+  #provlapp-utskrift,
+  #provlapp-utskrift * {
+    visibility: visible;
+  }
+  #provlapp-utskrift {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  #provlapp-utskrift * {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+
 @layer components {
   .btn-primary {
     @apply bg-primary-500 hover:bg-primary-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200;

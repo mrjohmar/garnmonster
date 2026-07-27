@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Sparkles, Thermometer, Palette } from 'lucide-react';
+import { Sparkles, Thermometer, Palette, Grid3X3 } from 'lucide-react';
 
 export default function Header() {
   const location = useLocation();
@@ -26,6 +26,13 @@ export default function Header() {
               icon={<Thermometer className="w-4 h-4" />}
             >
               Temperaturmönster
+            </NavLink>
+            <NavLink
+              to="/monsterbyggare"
+              active={isActive('/monsterbyggare')}
+              icon={<Grid3X3 className="w-4 h-4" />}
+            >
+              Mönsterbyggare
             </NavLink>
             <NavLink
               to="/garnbibliotek"

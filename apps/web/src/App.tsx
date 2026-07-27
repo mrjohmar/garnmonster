@@ -3,6 +3,7 @@ import Header from '@/components/Header';
 import HomePage from '@/pages/HomePage';
 import TemperaturePatternPage from '@/pages/TemperaturePatternPage';
 import YarnLibraryPage from '@/pages/YarnLibraryPage';
+import PatternBuilderPage from '@/pages/PatternBuilderPage';
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/temperatur" element={<TemperaturePatternPage />} />
+          <Route path="/monsterbyggare" element={<PatternBuilderPage />} />
           <Route path="/garnbibliotek" element={<YarnLibraryPage />} />
         </Routes>
       </main>

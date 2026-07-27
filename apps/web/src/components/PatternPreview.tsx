@@ -3,6 +3,8 @@ import { PatternRow } from '@/types';
 import { ZoomIn, ZoomOut, Download, List, Grid3X3 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { sv } from 'date-fns/locale';
+import { adjustBrightness } from '@/utils/color';
+import BlanketPreview, { PreviewRow } from './BlanketPreview';
 
 interface PatternPreviewProps {
   rows: PatternRow[];
@@ -158,61 +160,22 @@ export default function PatternPreview({ rows }: PatternPreviewProps) {
 
       {/* Pattern visualization */}
       {viewMode === 'blanket' ? (
-        <div
-          className="overflow-auto bg-gray-50 rounded-lg border border-gray-200"
-          style={{ maxHeight: '500px' }}
-        >
-          <div className="p-4">
-            <div
-              className="bg-white rounded shadow-sm overflow-hidden"
-              style={{
-                transform: `scale(${zoom})`,
-                transformOrigin: 'top left',
-                width: 'fit-content',
-              }}
-            >
-              {rows.map((row, index) => (
-                <div
-                  key={row.date}
-                  className="flex items-center cursor-pointer hover:brightness-110 transition-all relative group"
-                  style={{
-                    backgroundColor: row.color,
-                    height: '24px',
-                    minWidth: '350px',
-                  }}
-                  onMouseEnter={() => setHoveredRow(row)}
-                  onMouseLeave={() => setHoveredRow(null)}
-                  onClick={() => setSelectedRow(selectedRow?.date === row.date ? null : row)}
-                  title={`Rad ${index + 1}: ${format(parseISO(row.date), 'd MMM', { locale: sv })} - ${row.temperature}°C`}
-                >
-                  {/* Yarn texture effect */}
-                  <div
-                    className="absolute inset-0 opacity-15"
-                    style={{
-                      backgroundImage: `repeating-linear-gradient(
-                        90deg,
-                        transparent,
-                        transparent 2px,
-                        rgba(0,0,0,0.15) 2px,
-                        rgba(0,0,0,0.15) 3px
-                      )`
-                    }}
-                  />
-                  {/* Row info overlay */}
-                  <div className="absolute inset-0 flex items-center justify-between px-2 text-xs font-medium"
-                       style={{
-                         color: getContrastColor(row.color),
-                         textShadow: '0 1px 2px rgba(0,0,0,0.3)'
-                       }}>
-                    <span className="opacity-70">{index + 1}</span>
-                    <span>{format(parseISO(row.date), 'd MMM', { locale: sv })}</span>
-                    <span className="font-bold">{row.temperature > 0 ? '+' : ''}{row.temperature}°C</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <BlanketPreview
+          zoom={zoom}
+          rows={rows.map<PreviewRow>((row) => ({
+            key: row.date,
+            hex: row.color,
+            vanster: rows.findIndex((r) => r.date === row.date) + 1,
+            mitten: format(parseISO(row.date), 'd MMM', { locale: sv }),
+            hoger: `${row.temperature > 0 ? '+' : ''}${row.temperature}°C`,
+          }))}
+          selectedKey={selectedRow?.date ?? null}
+          onRowClick={(key) => {
+            const row = rows.find((r) => r.date === key) ?? null;
+            setSelectedRow((prev) => (prev?.date === key ? null : row));
+          }}
+          onRowHover={(key) => setHoveredRow(key ? rows.find((r) => r.date === key) ?? null : null)}
+        />
       ) : (
         /* List view */
         <div
@@ -290,27 +253,6 @@ export default function PatternPreview({ rows }: PatternPreviewProps) {
       <canvas ref={canvasRef} className="hidden" />
     </div>
   );
-}
-
-// Helper to adjust color brightness
-function adjustBrightness(hex: string, percent: number): string {
-  const num = parseInt(hex.replace('#', ''), 16);
-  const amt = Math.round(2.55 * percent);
-  const R = Math.max(0, Math.min(255, (num >> 16) + amt));
-  const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + amt));
-  const B = Math.max(0, Math.min(255, (num & 0x0000FF) + amt));
-  return `#${(1 << 24 | R << 16 | G << 8 | B).toString(16).slice(1)}`;
-}
-
-// Helper to get contrasting text color (black or white)
-function getContrastColor(hex: string): string {
-  const num = parseInt(hex.replace('#', ''), 16);
-  const r = (num >> 16) & 255;
-  const g = (num >> 8) & 255;
-  const b = num & 255;
-  // Calculate relative luminance
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.5 ? '#1f2937' : '#ffffff';
 }
 
 // Get month summary with sample colors
